@@ -1,0 +1,8 @@
+[submodule "DATN_RTL"]
+	path = DATN_RTL
+	url = https://github.com/CuongNgyn2005/LLM_GEMMA3-1B-INT8.git
+	branch = spu
+[submodule "llama.cpp"]
+	path = llama.cpp
+	url = https://github.com/CuongNgyn2005/Infrastructure_GEMMA3.git
+	branch = main

@@ -1,0 +1,7 @@
+- Trong khi hoạt động trên toàn bộ project, không được thay đổi/ chỉnh sửa các project vivado, các project phần mềm vivado là dạng như DATN_VIVADO\project_1, còn files RTL thì được chỉnh thoải mái. Riêng những folder như project_1 thì chỉ được đọc log, reports và những thứ liên quan.
+- Sau khi thay đổi RTL, luôn phải thực hiện quá trình mô phỏng (simulation) xác minh được behavior của RTL là đúng chức năng, mô phỏng trong manual_sim.
+- Khi trả lời cho user, bạn luôn phải trả lời những câu 1 nghĩa, mạch lạc, rõ ràng, không lấy phép ẩn dụ/ hoán dụ trong câu trả lời.
+- Tất cả các thay đổi chỉnh sửa đều phải report user in chat.
+- Đường dẫn đến simulation command D:\Xlinx\
+- Nếu có task, phải thực hiện tất cả các task trong 1 lần prompt, không được làm giữa chừng rồi không phản hồi nữa, phải làm xong task.
+- Dự án phải được hoàn thiện theo hướng hoàn hảo nhất, không được né lỗi hiện tại để đạt những thành tựu trước mắt.
