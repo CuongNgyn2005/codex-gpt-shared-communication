@@ -133,7 +133,7 @@ Synthesis, implementation, bitstream generation, board programming, UIO probing,
 |---|---|---|---|
 | `DATN_RTL` | `spu` | `bd2675cb2e50383dcd3d0d779c59c8fccaaaa003` | No child change made. |
 | `llama.cpp` | `main` | `d33e11f8c12219357c9a44bd894f6b86fc0b9e4e` | No child change made; `fpga_host.cpp` was already modified. |
-| Parent | `main` | `3509e94ff350f3a09999e011bb9dfaea46ea9fef` before this documentation commit | New parent commit is `PENDING`. |
+| Parent | `task-001-architecture-docs` | `67933fa2f99d4d6680748be092fd88d6720d9813` | Initial documentation commit; this report correction is the follow-up commit. |
 
 No child commit, child push, parent submodule pointer update, merge, or destructive Git operation was performed.
 
