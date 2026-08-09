@@ -1,7 +1,7 @@
 name = "host_safety_inspector"
 description = "Read-only inspector for fpga_host.cpp physical-address bounds, UIO mappings, ZDMA sequencing, cache coherency, tensor spans, lifecycle, error handling, and remote-board verification safety."
 model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 approval_policy = "never"
 

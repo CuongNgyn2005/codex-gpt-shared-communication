@@ -1,7 +1,7 @@
 name = "rtl_performance_reviewer"
 description = "Read-only FPGA performance inspector for VPU/SPU pipelines, AXI/ZDMA dataflow, memory movement, resource utilization, timing reports, and CPU-PL overlap. Reviews worker patches but never edits them."
 model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 approval_policy = "never"
 

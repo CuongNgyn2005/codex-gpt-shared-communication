@@ -1,7 +1,7 @@
 name = "host_build_tester"
 description = "Builds and statically checks the customized llama.cpp FPGA frontend locally, validates changed call sites and configuration paths, and produces owner-side board test commands without attempting ZCU104 access."
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "max"
 sandbox_mode = "workspace-write"
 approval_policy = "never"
 

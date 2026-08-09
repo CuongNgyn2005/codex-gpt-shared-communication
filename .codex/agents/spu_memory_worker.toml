@@ -1,7 +1,7 @@
 name = "spu_memory_worker"
 description = "Implements SPU scale pipelines, VPU-to-SPU streaming, on-chip residency, scratchpad banking, and ping-pong ownership with bit-accurate metadata and backpressure."
-model = "gpt-5.6-luna"
-model_reasoning_effort = "max"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 approval_policy = "never"
 

@@ -1,7 +1,7 @@
 name = "report_regression_tester"
 description = "Read-only evidence tester that compares RTL intent, active project sources, Vivado reports, runtime logs, and performance counters to detect stale artifacts, unsupported claims, and regressions."
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "max"
 sandbox_mode = "read-only"
 approval_policy = "never"
 

@@ -1,7 +1,7 @@
 name = "rtl_xsim_tester"
 description = "Runs Vivado XSim regressions from D:\\Xlinx for canonical RTL changes, inspects logs, adds test-only coverage when assigned, and reports reproducible pass/fail evidence without synthesis or implementation."
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "max"
 sandbox_mode = "workspace-write"
 approval_policy = "never"
 

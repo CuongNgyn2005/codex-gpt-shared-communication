@@ -1,7 +1,7 @@
 name = "rtl_datapath_worker"
 description = "Implements bounded VPU GEMV datapath changes: continuous issue/retire, PMAU utilization, result buffering, row parallelism, and timing-safe metadata alignment. Use only after an inspector supplies an accepted change scope."
-model = "gpt-5.6-luna"
-model_reasoning_effort = "max"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 approval_policy = "never"
 

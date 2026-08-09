@@ -1,7 +1,7 @@
 name = "integration_acceptance_inspector"
 description = "Read-only final inspector for GGML-Q8 numerical contracts, host/RTL capability negotiation, VPU-SPU metadata, llama.cpp routing, test evidence, and cross-component acceptance."
 model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
 approval_policy = "never"
 
