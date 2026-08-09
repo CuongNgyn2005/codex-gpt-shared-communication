@@ -1,8 +1,52 @@
 # RESULT-004
 
+Final status: `PARTIAL`
+
+This file contains the complete TASK-004 investigation, implementation, local verification, and owner-board result. No separate RESULT-004 implementation report remains.
+
+## 0. Implementation and owner-board disposition
+
+The reviewed host change is commit `a09059d0c545e3c378212503901d1b21eb79895d` on `llama.cpp/main`. The host manifest version is `zcu104-gemma3-q8-v90-prepack-hotpath`. The former TASK-004 local and remote branches were deleted after the commit was fast-forwarded and pushed to `origin/main`.
+
+Changed host files:
+
+- `ggml/src/ggml-cpu/fpga_host.cpp`: removes repeated full catalog validation from normal HITs, fuses packed CRC with staging writes, fuses scale CRC with actual SPU_PARAM consumption, adds fail-closed aggregate telemetry, and updates the host version.
+- `ggml/src/ggml-cpu/fpga_weight_layout.{h,cpp}`: provides selected-descriptor validation and fused packed/scale helpers.
+- `tests/test-fpga-host-prepack.cpp`: verifies CRC equivalence, packed corruption detection, scale corruption detection, staged bytes, and SPU_PARAM padding.
+
+Local evidence:
+
+- Windows board-free `fpga-host-prepack-selftest`: PASS.
+- WSL Release build of `ggml-cpu` and `fpga-host-prepack-selftest`: PASS.
+- WSL board-free self-test: PASS.
+- A complete WSL build reached 100%, including `llama-cli`.
+- Windows full build remained blocked before the changed source by the existing MinGW pthread compatibility error in `ggml-cpu.c`.
+
+Owner-provided ZCU104 v90 evidence:
+
+| Metric | v89 | v90 | Result |
+|---|---:|---:|---|
+| `copy_us` | 190,173,577 | 107,213,958 | 43.62% lower; performance gate FAIL |
+| `copy_stream_crc_store_us` | not separated | 107,183,966 | 99.972% of v90 copy time |
+| `prep_scale_pack_ms` | 21,353.752 | 18,757.799 | no regression |
+| `prep_total_ms` | 223,265.912 | 137,056.306 | lower |
+| `token_wall_ms` | 254,298.680 | 166,335.922 | lower |
+| Builds / misses / hits / fallbacks | 182 / 182 / 27,842 / 0 | 182 / 182 / 27,842 / 0 | PASS |
+| Direct packs | not reported | 0 | PASS |
+
+The board manifest reports v90, `host_weight_prepack=1`, and `preload=0`. The supplied run reports 182 expected and completed eligible FPGA jobs, one reviewed vocabulary CPU bypass, zero unavailable fallback, zero direct packs, zero stream drops/errors, and deterministic output `Okay`. The supplied log contains no catalog poison, CRC, range, descriptor, ZDMA, or stream error.
+
+Functional acceptance: **PASS on owner-provided board evidence.**
+
+Performance acceptance: **FAIL.** TASK-004 required `copy_us < 95.087 s`; v90 measured `107.214 s`. It improved over v89 but did not meet the required threshold or the `<=40 s` target.
+
+The v90 scale path preserves corruption detection: each static scale value contributes to CRC during the same traversal that constructs SPU_PARAM. The implementation does not delete scale CRC from the hot path.
+
+`prep_overlap_ms` is not confirmed timer contamination. Current host timestamps cannot distinguish genuine concurrent PL execution from delayed host observation of DONE. True PL START-to-DONE time cannot be recovered until hardware-independent timing exists.
+
 ## 1. Tested source and board evidence
 
-This is an inspection-only report. No implementation code changed. No local build or FPGA test ran.
+This section records the pre-implementation v89 inspection. No implementation code changed during that investigation, and no local build or FPGA test ran at that stage.
 
 Source inspected: `llama.cpp` branch `main`, commit `cc8d475057e5a05045fb351eb7a52e56f3de9f21`. Tracked `fpga_host.cpp` has no diff and declares `zcu104-gemma3-q8-v89-tile-scale-span`. The board manifest reports that version, build `Aug 9 2026 07:53:06`, protocol 2, bitstream `0x56505532`, P2 ABI `0x50320003`, `preload=0`, and `host_weight_prepack=1`. The board log has no Git hash, so the version match is the available binary/source identity evidence; exact commit identity is not cryptographically proven.
 
@@ -87,11 +131,11 @@ Dynamic activation-scale generation occurs before this timer. Scale DMA and its 
 
 ## 7. Scheduler/IP-compute timing verdict
 
-**PARTIALLY CONTAMINATED. `ip_compute_sum_ms=199964.187` is not independent PL execution time.**
+**UNRESOLVED MEASUREMENT. `ip_compute_sum_ms=199964.187` is host-observed launch-to-DONE time, not an independently measured PL execution interval.**
 
 With `FPGA_P2_INPUT_PRELOAD=0`, the scheduler launches N, records its start, then fully prepares N+1 before calling the wait/poll function for N. Preparation includes catalog lookup, catalog copy, scale construction, activation staging, barrier, and slot readback. Only after preparation ends does the host poll N, observe DONE, and calculate `ip_compute_us = observed_done_time - start_time`. It then waits for SPU finality, drains and accumulates N, retires N, and launches N+1.
 
-If N finishes during preparation, completion is observed late. The scheduler reports 199.000219 s of preparation intersecting observed running-job windows, and this interval is included in launch-to-observed-DONE timers. Subtraction leaves 0.963968 s for true PL execution plus remaining polling, edge jobs, and timestamp overhead. Existing telemetry proves at least 199.000219 s contamination but cannot recover true PL time. A conservative derivable aggregate PL range is 0..0.963968 s; this is a bound, not a measurement.
+The scheduler reports 199.000219 s of host preparation overlapping host-observed running intervals. That overlap is compatible with two cases: the FPGA was genuinely computing while the CPU prepared the next job, or the FPGA completed earlier and the same host thread observed DONE after preparation. Current timestamps cannot separate those cases. Therefore, `prep_overlap_ms` does not prove timer contamination, must not be subtracted from `ip_compute_sum_ms`, and cannot produce a valid PL execution bound. True PL START-to-DONE time cannot be recovered from this telemetry.
 
 The minimum independent measurement is a hardware counter starting on accepted `CTRL_START` and latching on hardware DONE, accumulated per graph. A host-only alternative needs an interrupt or independent polling thread that timestamps DONE while preparation continues.
 
@@ -126,7 +170,7 @@ Capture before inference, during catalog construction, during prompt evaluation,
 | Rank | Item | Status | Evidence |
 |---:|---|---|---|
 | 1 | A. Catalog-to-staging copy | CONFIRMED BOTTLENECK | Direct 190.173577 s measurement. |
-| 2 | E. Scheduler/timing contamination | TELEMETRY ERROR / MEASUREMENT CONTAMINATION | At least 199.000219 s of reported compute overlaps host preparation; not an additional cost. |
+| 2 | E. Scheduler/timing measurement | UNPROVEN | Host preparation overlaps the host-observed running interval, but current timestamps cannot distinguish genuine concurrent PL work from delayed DONE observation. |
 | 3 | D. Scale preparation | CONFIRMED CONTRIBUTOR | Direct 21.353752 s measurement. |
 | 4 | C. Catalog lookup/selection | CONFIRMED CONTRIBUTOR | Direct 11.554167 s; 10.777285 s is first-use construction. |
 | 5 | B. Repeated integrity validation | CONFIRMED CONTRIBUTOR | Four metadata, two packed, and two scale passes per tile; seconds overlap items A/C/D. |
@@ -135,7 +179,7 @@ Capture before inference, during catalog construction, during prompt evaluation,
 
 ## 11. Minimal safe fix
 
-Recommendation only; no implementation occurred.
+This was the pre-implementation recommendation. The v90 implementation summarized in Section 0 subsequently applied this integrity boundary while preserving packed and scale corruption detection in their consuming traversals.
 
 Use BUILD-to-VALID publication as the integrity boundary for immutable catalog content. Keep complete key/metadata CRC generation, every-descriptor bounds/alignment validation, packed and scale CRC generation, capacity checks, and epoch binding at publication.
 
