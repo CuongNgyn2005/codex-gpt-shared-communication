@@ -143,8 +143,9 @@ Do not start the P1 performance comparison until the two open P1 defects are fix
 ```text
 DATN_RTL:  spu  8fc83108df3d4aa23bcc1a31125ee764047fa821
 llama.cpp: task-003-host-prepack cc8d475057e5a05045fb351eb7a52e56f3de9f21
-Parent:    task-003 PENDING
+Parent:    task-003 ec6ce4475e5f02a2ade5f777b960772baf497d57
 ```
 
 The host child commit was pushed to `origin/task-003-host-prepack`. The parent
-submodule pointer and this report are ready for the parent commit.
+submodule pointer and this report are recorded in parent commit
+`ec6ce4475e5f02a2ade5f777b960772baf497d57`.
