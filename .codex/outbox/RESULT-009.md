@@ -204,7 +204,7 @@ Run-level verdict: `PASS`.
 
 Phase 1 functional verdict: `PASS`.
 
-Overall TASK-009 status is `PARTIAL`, not blocked. Remaining evidence is limited to deployment provenance and controlled performance acceptance: binary/model/loaded-bitstream SHA-256 values, plus at least three comparable long production runs. A deterministic full-output CPU-reference comparison would strengthen numerical regression coverage but is not evidence of a defect in the accepted Phase 1 path.
+Overall Phase 1 status is `PARTIAL`, not blocked. Remaining Phase 1 evidence is limited to deployment provenance and controlled performance acceptance: binary/model/loaded-bitstream SHA-256 values, plus at least three comparable long production runs. Later roadmap phases retain their own acceptance gates; in particular, Phase 6 still requires the selected cross-K FP32-bit measurement described below. A deterministic full-output CPU-reference comparison would strengthen numerical regression coverage but is not evidence of a defect in the accepted Phase 1 path.
 
 ## Repository branches and commits
 
@@ -403,6 +403,223 @@ The result supports these decisions:
 - The benchmark log does not record binary, GGUF, and actually loaded bitstream SHA-256 values. Runtime capability admission occurred in code, but artifact provenance remains incomplete.
 - The run provides one diagnostic capture with five internal repetitions, not three independent production runs.
 - Internal PL interconnect behavior is unobservable because the benchmark never starts the VPU.
+
+## Phase 6 numerical-contract decision and required measurement
+
+### Decision status
+
+`ARM_GOLDEN_CAPTURED_PL_COMPARISON_PENDING`
+
+Phase 6 is a measurement and numerical-ABI qualification task before it is an RTL implementation task. TASK-009 resolves the architectural decision as follows:
+
+1. The deployed ARM host is the numerical authority. A mathematical description such as “IEEE FP32 round-to-nearest-even” is not sufficient by itself.
+2. The golden record is captured after every K chunk, not only at the final matrix output.
+3. Each chunk records the exact PL-produced Q16 contribution and the exact 32-bit FP32 accumulator state produced by the deployed ARM instruction sequence.
+4. A future PL cross-K accumulator may be called `bit-exact v88` only if its 32-bit accumulator value matches the captured ARM value after every chunk and at the final output.
+5. If the bit patterns do not match, the PL implementation defines a new numerical ABI and must be qualified as such; tolerance-based closeness cannot be relabeled as bit-exact equivalence.
+
+This resolves the Phase 6 contract choice. The deployed ARM cross-K golden capture has now been executed and is recorded below. A future PL cross-K FP32 accumulator has not yet produced comparison bits, so this is not a `PASS_BIT_EXACT_CONTRACT` verdict.
+
+### Owner-provided Phase 6 board measurement
+
+Evidence level: owner-provided ZCU104 execution. The correlated artifacts are:
+
+```text
+DATN_RTL/fpga_debug.log
+SHA-256 E28E4323BF22AC42650539BE4EE493D2E0DC0000DC12B8AE99ED0C0DBA55D43E
+
+DATN_RTL/result_prompt.txt
+SHA-256 312463760CC1B6E43CDA03B84F7750DFA292544DE3C2CB13F737FE3A058DCFE8
+```
+
+The run started at epoch `1786436860` (`2026-08-11 15:27:40 +07`). The terminal command and FPGA log agree on the following bounded selector and qualification mode:
+
+```text
+tensor=blk.0.ffn_down.weight
+layer=0
+tile_row0=0
+row_first=0
+row_count=4
+expected_k_chunks=4
+record_limit=16
+route=p2_single_bank_cpu_shadow
+FPGA_PL_SCALE_CONTRACT_CHECK=1
+FPGA_P2_ALLOW_MULTITILE=1
+FPGA_P2_TILE_LIMIT=4
+P3/input-preload=off
+P2 scale-contract dispatch=serialized single-bank
+```
+
+Runtime identity was reported as host version `zcu104-gemma3-q8-v88-compact-telemetry`, host build `Aug 11 2026 08:14:29`, llama build `198 (b9d4df9)`, protocol `2`, bitstream ID `0x56505532`, P2 ABI `0x50320003`, and P3 ABI `0x50330001`. The model was Gemma 3 1B, GGUF V3, Q8_0, 1013.54 MiB, with `n_ff=6912`. These runtime fields are mutually consistent, but the binary, model, and actually loaded bitstream file hashes were not recorded; artifact provenance is therefore not cryptographically complete.
+
+The corrected selector lifecycle executed as designed:
+
+```text
+P6_ARM_GOLDEN_HOST_SELFTEST pass
+    m2_defer=1
+    m1_eligible=1
+    cleanup_incomplete_rejected=1
+    cleanup_complete_accepted=1
+    four_contiguous_chunks=1
+
+P6_ARM_GOLDEN_DEFER
+    tensor=blk.0.ffn_down.weight layer=0 M=2
+    action=native_cpu_before_validation_accounting_staging_hardware_dst
+```
+
+Thus the automatic `M=2` llama warm-up was delegated to native CPU before FPGA validation, accounting, staging, hardware access, or destination handling. The diagnostic remained armed for the selected `M=1` decode call.
+
+The command set `FPGA_PIPELINE_ENABLE=0`, which the host parses as a false flag rather than as the explicit pipeline opt-out (`FPGA_PIPELINE_DISABLE=1`). Consequently the general configuration log still reports scheduler capability enabled. This does not invalidate the capture: the active P2 scale-contract branch is source-gated to the serialized single-bank function, and the runtime records `route=p2_single_bank_cpu_shadow` with sequential jobs 1 through 4. A future rerun may use `FPGA_PIPELINE_DISABLE=1` to make the global configuration intent unambiguous.
+
+The selected decode produced four verified SPU Q16 tiles followed by exactly 16 ARM golden records:
+
+| K chunk | `k_block0` | `group_blocks` | rows recorded | Q16 verifier |
+|---:|---:|---:|---:|---|
+| 1 | 0 | 64 | 0-3 | `SPU_SCALE_CONTRACT_Q16_PASS` |
+| 2 | 64 | 64 | 0-3 | `SPU_SCALE_CONTRACT_Q16_PASS` |
+| 3 | 128 | 64 | 0-3 | `SPU_SCALE_CONTRACT_Q16_PASS` |
+| 4 | 192 | 24 | 0-3 | `SPU_SCALE_CONTRACT_Q16_PASS` |
+
+This covers maximum 64-block chunks and a partial final 24-block chunk. The measured Q16 contributions include positive and negative values:
+
+```text
+chunk 1: -11864, -25852,   9610, 13517
+chunk 2:   9261,   8491,  -2289, 19416
+chunk 3: -42080, -27086, -13158, 24323
+chunk 4:   -706,  -9215,   6897,  9006
+```
+
+For each of the four rows, chunk 1 starts with `before_bits=0x00000000`, and every later chunk's `before_bits` exactly equals the preceding chunk's `after_bits`. The final record reports:
+
+| row | chunk | signed Q16 | ARM before bits | ARM after bits |
+|---:|---:|---:|---:|---:|
+| 0 | 1 | -11864 | `0x00000000` | `0xbe396000` |
+| 0 | 2 | 9261 | `0xbe396000` | `0xbd22b000` |
+| 0 | 3 | -42080 | `0xbd22b000` | `0xbf2e8b00` |
+| 0 | 4 | -706 | `0xbf2e8b00` | `0xbf314d00` |
+| 1 | 1 | -25852 | `0x00000000` | `0xbec9f800` |
+| 1 | 2 | 8491 | `0xbec9f800` | `0xbe87a200` |
+| 1 | 3 | -27086 | `0xbe87a200` | `0xbf2d9f00` |
+| 1 | 4 | -9215 | `0xbf2d9f00` | `0xbf519e00` |
+| 2 | 1 | 9610 | `0x00000000` | `0x3e162800` |
+| 2 | 2 | -2289 | `0x3e162800` | `0x3de4c800` |
+| 2 | 3 | -13158 | `0x3de4c800` | `0xbdb66800` |
+| 2 | 4 | 6897 | `0xbdb66800` | `0x3c848000` |
+| 3 | 1 | 13517 | `0x00000000` | `0x3e533400` |
+| 3 | 2 | 19416 | `0x3e533400` | `0x3f00a500` |
+| 3 | 3 | 24323 | `0x3f00a500` | `0x3f5fa800` |
+| 3 | 4 | 9006 | `0x3f5fa800` | `0x3f816b00` |
+
+These are the authoritative deployed-ARM golden values for this bounded selector and can be consumed directly by the future RTL comparison test.
+
+```text
+P6_ARM_GOLDEN_CAPTURE_COMPLETE
+tensor=blk.0.ffn_down.weight layer=0 graph=13
+chunks=4 records=16 route=cpu_shadow
+pl_accum_bits=unavailable pl_bit_match=unavailable
+status=ARM_GOLDEN_ONLY
+```
+
+No `P6_ARM_GOLDEN_CAPTURE_REJECT` occurred. The run also reported four Q16 checks, a passing P2 tile boundary, 39 completed DMA descriptors, and zero input-integrity failures, raw mismatches, raw repairs, value mismatches, staging restages, stream drops, and stream errors. CPU-shadow ownership and `q8_hw_completed=0` are intentional for this qualification route: the hardware supplies the checked SPU Q16 contributions, while native GGML owns the complete matrix destination.
+
+This measurement is not a production-throughput result. The reported single-token `2.69 token/s` and qualification token timing include CPU-shadow diagnostic behavior and must not be compared with normal P2 inference speed.
+
+### Existing evidence that supports the selected contract
+
+The current host consumes each SPU row result as a signed Q16.16 contribution and performs the deployed ARM-authority update:
+
+```cpp
+accum_col[row] += (float) q16 * (1.0f / 65536.0f);
+```
+
+The current P2 diagnostic independently reconstructs the expected signed Q16 contribution from the Q8 raw dot product and the activation/weight FP16 scales. It compares the reconstructed integer contribution against the SPU output row before host accumulation. The owner-provided bounded tile run reported:
+
+```text
+SPU_SCALE_CONTRACT_Q16_PASS
+tensor=blk.0.attn_q.weight
+job=1
+tile=0
+rows=256
+expected_raw=9216
+expected_out=256
+
+p2_tile_q16_checks=1
+p2_tile_boundary=1
+input_integrity_failures=0
+p2_stream_drops=0
+p2_stream_errors=0
+```
+
+This is exact evidence for the selected tile's PL-to-host Q16 contribution boundary. It proves that, for that bounded tile, every checked SPU Q16 row matched the host reconstruction and the tile retired cleanly.
+
+The source paths implementing this evidence are:
+
+```text
+fpga_spu_q16_contribution()
+    reconstructs the expected signed Q16.16 contribution
+
+fpga_pl_scale_contract_verify_q16_tile()
+    compares every SPU output row with the reconstructed Q16 value
+
+fpga_p2_consume_spu_output()
+    applies the deployed ARM FP32 accumulation operation
+```
+
+### Evidence still required for a PL bit-exact verdict
+
+The accepted tile run explicitly reported:
+
+```text
+p2_matrix_contract_checks=0
+matrix_value_contract=not_attempted
+```
+
+The returned board logs now contain the multi-chunk case, every selected Q16 contribution, and the deployed ARM FP32 accumulator bits before and after every selected chunk. They do not yet contain:
+
+- a PL cross-K FP32 accumulator value for any chunk;
+- per-chunk `ARM bits == PL bits` verdicts;
+- a final exact ARM-versus-PL 32-bit accumulator comparison;
+- owner-board Q16 cases containing an exact zero contribution, near-rounding-boundary vectors, or non-finite/overflow rejection. Positive, negative, and cancellation behavior are present; zero-bit and rejection behavior are currently covered only by the host self-test.
+
+The existing tolerance-based matrix checks (`atol`/`rtol`) are useful numerical diagnostics, but they do not satisfy the Phase 6 bit-exact contract. The weight-path Phase 2 benchmark is host-only and provides no Phase 6 numerical evidence.
+
+### Required Phase 6 measurement record
+
+For a selected matrix containing at least two K chunks, capture one record per output row and chunk:
+
+```text
+tensor
+layer
+job_id
+tile_id
+row
+k_chunk_index
+k_block0
+group_blocks
+raw_dot_or_raw_sum
+q16_contribution_signed
+arm_accum_before_fp32_bits
+arm_accum_after_fp32_bits
+pl_accum_after_fp32_bits
+chunk_bit_match
+```
+
+The deployed ARM golden must be captured from the actual production accumulation operation, preserving compiler, architecture, optimization, and operation ordering. It must not be recomputed later using a desktop model, double precision, a reordered sum, or a different compiler and called equivalent.
+
+### Phase 6 acceptance rule
+
+```text
+for every tested row and K chunk:
+    measured SPU q16 == reconstructed golden q16
+    PL accumulator FP32 bits == deployed ARM accumulator FP32 bits
+
+and at final output:
+    final PL FP32 bits == final deployed ARM FP32 bits
+```
+
+Required coverage includes positive and negative Q16 contributions, zero, cancellation, values near FP32 rounding boundaries, at least two chunks, maximum supported group size, partial final K group, odd/even row counts, and non-finite/overflow rejection.
+
+Phase 6 has moved from `DECISION_RESOLVED_MEASUREMENT_PENDING` to `ARM_GOLDEN_CAPTURED_PL_COMPARISON_PENDING`. It may move to `PASS_BIT_EXACT_CONTRACT` only after a PL cross-K accumulator supplies all required per-chunk records and they match the captured deployed-ARM bits exactly, with no repair, canonicalization, tolerance substitution, or CPU output substitution. A mismatch changes the verdict to `NEW_NUMERIC_ABI_REQUIRED`, not an approximate Phase 6 pass.
 
 ## Recommended next optimization: bounded packed-weight residency
 
