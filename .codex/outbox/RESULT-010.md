@@ -2,13 +2,16 @@
 
 ## 1. Final status
 
-`PARTIAL`
+`ACCEPTED_FOR_OWNER_TEST`
 
-The original TASK-010 checkpoint was accepted for owner testing, but the
-follow-up canonical routed report and source-only timing iteration require
-the timing claims below to be re-audited. The ZCU104 board is not available
-in this workspace, and no follow-up synthesis or implementation is being
-run under the current simulation-only instruction.
+The current project2 timing-closure iteration satisfies the local RTL
+simulation, synthesis, implementation, routed setup/hold/pulse-width, and
+bitstream-generation gates. The ZCU104 board is not connected to this
+workspace, so physical board execution remains owner-only evidence.
+
+The historical project1 checkpoint details below are retained for traceability;
+the final project2 signoff in Section 13 is authoritative for the current
+request.
 
 ## 2. Task summary
 
@@ -242,3 +245,94 @@ in the parent root were moved under
 `DATN_RTL/DATN_VIVADO/manual_sim/task010_vivado/`. No new synthesis or
 implementation artifacts were created in the parent root during this
 follow-up.
+
+## 13. Final project2 timing-closure signoff (iteration 19)
+
+This section supersedes the historical project1 and pre-refresh values above
+for the current request. `project_1` was not modified or used for this run.
+
+### Final status and changes
+
+The 16×4 INT8 VPU datapath remains in place from the preceding implementation.
+This timing iteration changed only the SPU local-memory region-select path:
+
+| File | Previous behavior | New behavior and reason |
+|---|---|---|
+| `RTL/SPU_Local_Memory.v:89-90, 154-164, 225-233` | `core_region` and `core2_region` directly selected the live read-data muxes. | Registered `core_region_r` and `core2_region_r` capture the selectors when their existing enables assert, removing the live selector cone from the SPU scale-read path without changing BRAM enables, addresses, AXI/MMIO timing, or protocol latency. |
+| `DATN_VIVADO/project_2/src/SPU_Local_Memory.v` | Project2 source mirror. | Byte-identical mirror of canonical RTL. |
+| `RTL/RTL_FILE_OVERVIEW.md` | Timing section described stale project1/source-only evidence. | Updated with project2 iteration-19 timing, resources, simulation, DRC, and bitstream evidence. |
+
+Canonical RTL, project2 `src`, and the refreshed generated IP source were
+verified byte-identical, each with SHA-256
+`A4C5CEDEE5DC6D9094264B7B14628BF1F0EF4CF7D25C92F52CCC95DDB89C0DD8`.
+
+### Validation evidence
+
+| Gate | Verified result |
+|---|---:|
+| Integration XSim | `PASS tb_VPU_SPU8_integration`, finish at `1771 ns` |
+| Standalone SPU XSim | `[TB][PASS] SPU_Top tests passed pass_count=94`, finish at `20705 ns` |
+| Synthesis | completed; `0 errors`, `0 critical warnings` |
+| Implementation | route and `write_bitstream` completed; `0 errors` |
+| Routed setup | WNS `+0.509 ns`, TNS `0 ns`, `0` failing endpoints |
+| Routed hold | WHS `+0.010 ns`, THS `0 ns`, `0` failing endpoints |
+| Routed pulse width | WPWS `+1.166 ns`, TPWS `0 ns`, `0` failing endpoints |
+| Timing summary | `All user specified timing constraints are met.` |
+| DSP48E2 | `406` |
+| RAMB36E2 / RAMB18E2 | `104 / 1` |
+| URAM288 | `64` |
+| Routed DRC | `0` errors, `454` warnings |
+
+The final worst setup path is
+`SPU_VPU_Stream8/pair_idx_r_reg[1]` to the SPU input BRAM
+`WEBWE[0]`, with `+0.509 ns` slack and `4.108 ns` data-path delay. The
+warnings are advisory implementation/DSP-pipeline and unrouted-load
+diagnostics; they do not constitute timing violations, and DRC reported no
+errors. The route-status report shows all `84,090` routable nets fully
+routed and `0` routing errors. The generated
+`project_2.ip_user_files/bd/SoC/ipshared/9e57` source cache is stale, but
+the active `.gen/sources_1/bd/SoC/ipshared/9e57` source is identical to the
+canonical and `project_2/src` copies; `project_2.xpr`, the active VPU XCI,
+and `component.xml` do not reference the stale user-file cache. No cache
+overwrite or generated-file cleanup was performed.
+
+### Exact commands and archived evidence
+
+The active project2 generated targets were refreshed with:
+
+```powershell
+cd D:\DOAN\DATN_RTL\DATN_VIVADO\manual_sim\project2_timing_iter16
+& D:\Xlinx\Vivado\2022.2\bin\vivado.bat -mode batch -notrace `
+  -log refresh_ip_iter19.log -journal refresh_ip_iter19.jou `
+  -source refresh_project2_targets_iter16.tcl
+```
+
+Simulation used Vivado 2022.2 XSim against `project_2/src`; the integration
+and standalone transcripts are:
+
+- `DATN_VIVADO/manual_sim/project2_timing_iter19/xsim_integration_iter19.log`
+- `DATN_VIVADO/manual_sim/project2_timing_iter19/spu/xsim_spu_iter19.log`
+
+Synthesis and implementation used the regenerated run scripts under
+`project_2/project_2.runs/synth_1` and `impl_1`, with direct Vivado batch
+execution. The report/checkpoint/bitstream evidence is archived under:
+
+- `DATN_VIVADO/manual_sim/project2_timing_iter19/synth/`
+- `DATN_VIVADO/manual_sim/project2_timing_iter19/impl/`
+
+The archived bitstream is `SoC_wrapper.bit`, SHA-256
+`DAC49A26DF7372A886EC1CD09A643B08E10660F8BDAA927CBCFACB3BE709D5C2`.
+
+### Repository state and remaining work
+
+- `DATN_RTL` branch/commit: `chatgpt/vpu16x8-spu8` /
+  `13be021a5b7df7e9a1f6eb7c4ae9d5c21894666e`.
+- `llama.cpp` branch/commit: `main` /
+  `1a1a5fc0ba9957b86322e03fb572c367ad7dd1d5` (unchanged).
+- Parent branch/commit: `main` /
+  `9be697a23fb46e09a7a47810c4c1ce295569a2f2`.
+- No commit, push, branch operation, or broad staging was performed.
+- Existing dirty/untracked owner and generated files were preserved.
+- Board programming, UIO access, `/dev/mem`, and physical ZCU104 execution
+  were not run because the board is unavailable; owner hardware validation is
+  the remaining acceptance step.
